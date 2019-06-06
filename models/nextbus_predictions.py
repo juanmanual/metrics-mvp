@@ -5,11 +5,28 @@ import os
 from xml.etree import ElementTree
 from datetime import datetime
 
-from models import predictions as p
+from models import predictions as p, nextbus
 from . import util
 
+STOPS_STR = '&stops='
 
-def get_prediction_data(agency_id: str, route_id: str, stop_id: str) -> p.Predictions:
+
+def generate_all_stops(agency_id: str) -> str:
+    route_infos = nextbus.get_route_list(agency_id)
+    route_ids = map(lambda route_info: route_info.id, route_infos)
+    route_id_to_stop_ids = {}
+    for route_id in route_ids:
+        route_config = nextbus.get_route_config(agency_id, route_id)
+        route_id_to_stop_ids[route_id] = route_config.get_stop_ids()
+
+    all_stops = STOPS_STR
+    for route, stop_ids in route_id_to_stop_ids.items():
+        stops = [f"{route}|{stop_id}" for stop_id in stop_ids]
+        all_stops += STOPS_STR.join(stops)
+    return f"{STOPS_STR}{all_stops}"
+
+
+def get_prediction_data(agency_id: str, route_id: str, stop_id: str):
     queried_time = datetime.Now()
     if re.match(r'^[\w\-]+$', agency_id) is None:
         raise Exception(f"Invalid agency id: {agency_id}")
