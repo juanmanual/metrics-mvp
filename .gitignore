@@ -465,3 +465,6 @@ typings/
 #adding data folder
 data/*.json
 data/*.csv
+
+# docker compose config
+docker-compose.yml
