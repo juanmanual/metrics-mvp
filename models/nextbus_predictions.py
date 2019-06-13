@@ -5,15 +5,53 @@ import os
 from xml.etree import ElementTree
 from datetime import datetime
 
-from models import predictions as p, nextbus, util
-from . import util
+from models import predictions as p, nextbus
+
+STOPS_STR = '&stops='
+
+
+'''
+Generate a list of strings in the format '&stops={route_id}|{stop_id}...'
+Since we can't substitute every stop on every route into an api call at once,
+segment the number of strings created by num_stops_per_route
+'''
+
+
+def get_routes_to_stops_str(agency_id: str, num_stops_per_str: int) -> str:
+    route_ids = [route.id for route in nextbus.get_route_list(agency_id)]
+    route_id_to_stop_ids = {}
+    for route_id in route_ids:
+        route_config = nextbus.get_route_config(agency_id, route_id)
+        route_id_to_stop_ids[route_id] = route_config.get_stop_ids()
+
+    route_strs = []
+    num_stops_so_far = 0
+    route_str = ''
+    for route_id in route_ids:
+        ret = gen_stop_str_for_route(
+            route_id, route_id_to_stop_ids[route_id], num_stops_so_far)
+        route_str += ret['stop_str']
+        num_stops_so_far += ret['num_stops_so_far']
+        if num_stops_so_far >= num_stops_per_str:
+            route_strs.append(route_str)
+            route_str = ''
+            num_stops_so_far = 0
+    return route_strs
+
+
+def gen_stop_str_for_route(route_id: str, stop_ids: list, num_stops_so_far: int) -> dict:
+    num_stops_so_far += len(stop_ids)
+    all_stops = STOPS_STR
+    stops = [f"{route_id}|{stop_id}" for stop_id in stop_ids]
+    all_stops += STOPS_STR.join(stops)
+    return {'stop_str': all_stops, 'num_stops_so_far': num_stops_so_far}
 
 
 def create_predictions_requests(agency_id: str) -> list:
     # TODO: error if response includes error
 
-    # we can maximally split the string into num_routes/10 before the API complains that the URI is too long
-    multi_stops = util.get_routes_to_stops_str(agency_id, 10)
+    # we can maximally add ~400 stops to the string before API complains it's too long
+    multi_stops = get_routes_to_stops_str(agency_id, 400)
     requests = []
     for stops in multi_stops:
         requests.append(
@@ -31,9 +69,7 @@ def get_prediction_data(agency_id: str):
     for request_url in create_predictions_requests(agency_id):
         response = requests.get(request_url)
         if response.status_code != 200:
-            print(request_url)
-            print(response.content)
-            return
+            response.raise_for_status()
 
         route_id_to_predictions.update(
             parse_prediction_response(queried_time, response))

@@ -3,9 +3,6 @@ import os
 import pytz
 from models import nextbus
 
-STOPS_STR = '&stops='
-
-
 def parse_date(date_str):
     (y, m, d) = date_str.split('-')
     return date(int(y), int(m), int(d))
@@ -65,38 +62,3 @@ def get_localized_datetime(d: date, time_str: str, tz: pytz.timezone):
         dt = dt + timedelta(days=int(time_str_parts[1]))
 
     return tz.localize(dt)
-
-
-'''
-Generate a list of strings in the format '&stops={route_id}|{stop_id}...'
-Since we can't substitute every stop on every route into an api call at once,
-segment the number of strings created by num_routes_per_str
-'''
-
-
-def get_routes_to_stops_str(agency_id: str, num_routes_per_str: int) -> str:
-    route_ids = [route.id for route in nextbus.get_route_list(agency_id)]
-    route_id_to_stop_ids = {}
-    for route_id in route_ids:
-        route_config = nextbus.get_route_config(agency_id, route_id)
-        route_id_to_stop_ids[route_id] = route_config.get_stop_ids()
-
-    route_strs = []
-    num_routes = len(route_ids)
-    for route_idx in range(0, num_routes, num_routes_per_str):
-        route_str = ''
-        for tmp_route_idx in range(route_idx, route_idx + num_routes_per_str-1):
-            if tmp_route_idx == num_routes:
-                break
-            route_id = route_ids[tmp_route_idx]
-            route_str += gen_stop_str_for_route(
-                route_id, route_id_to_stop_ids[route_id])
-        route_strs.append(route_str)
-    return route_strs
-
-
-def gen_stop_str_for_route(route_id: str, stop_ids: list) -> str:
-    all_stops = STOPS_STR
-    stops = [f"{route_id}|{stop_id}" for stop_id in stop_ids]
-    all_stops += STOPS_STR.join(stops)
-    return all_stops
